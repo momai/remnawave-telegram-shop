@@ -1,14 +1,47 @@
-name: Build docker image
+name: Build and Release
 
 on:
   push:
+    branches:
+      - develop
     tags:
       - '*'
   workflow_dispatch:
 
 jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    outputs:
+      tag_name: ${{ steps.tag_version.outputs.new_tag }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Bump version and push tag
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch
+          release_branches: develop
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag_version.outputs.new_tag }}
+          name: Release ${{ steps.tag_version.outputs.new_tag }}
+          body: ${{ steps.tag_version.outputs.changelog }}
+          draft: false
+          prerelease: false
+
   build-docker-image:
     runs-on: self-hosted
+    needs: [create-release]
+    if: always() && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/'))
     permissions:
       packages: write
     steps:
@@ -28,16 +61,15 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/remnawave-telegram-shop-bot
-          # Set up proper tagging strategy
           tags: |
-            # Always include latest tag
-            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
-            # Use semver tags when Git tag is in semver format
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            # Use the short SHA for non-tag builds
-            type=sha,format=short,prefix=
+            # Always include latest tag for develop branch
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/develop' }}
+            # Use semver tags when Git tag exists
+            type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=semver,pattern={{major}},enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            # Use the short SHA for develop branch
+            type=sha,format=short,prefix=develop-,enable=${{ github.ref == 'refs/heads/develop' }}
             # Include the tag name if it's a tag-triggered build
             type=ref,event=tag
 

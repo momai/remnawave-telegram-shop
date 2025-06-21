@@ -286,11 +286,11 @@ func (h Handler) buildStartKeyboard(existingCustomer *database.Customer, langCod
 		})
 	}
 
-	if config.ServerStatusURL() != "" {
-		inlineKeyboard = append(inlineKeyboard, []models.InlineKeyboardButton{
-			{Text: h.translation.GetText(langCode, "server_status_button"), URL: config.ServerStatusURL()},
-		})
-	}
+	// if config.ServerStatusURL() != "" {
+	// 	inlineKeyboard = append(inlineKeyboard, []models.InlineKeyboardButton{
+	// 		{Text: h.translation.GetText(langCode, "server_status_button"), URL: config.ServerStatusURL()},
+	// 	})
+	// }
 
 	if config.SupportURL() != "" {
 		inlineKeyboard = append(inlineKeyboard, []models.InlineKeyboardButton{
@@ -298,17 +298,17 @@ func (h Handler) buildStartKeyboard(existingCustomer *database.Customer, langCod
 		})
 	}
 
-	if config.FeedbackURL() != "" {
-		inlineKeyboard = append(inlineKeyboard, []models.InlineKeyboardButton{
-			{Text: h.translation.GetText(langCode, "feedback_button"), URL: config.FeedbackURL()},
-		})
-	}
+	// if config.FeedbackURL() != "" {
+	// 	inlineKeyboard = append(inlineKeyboard, []models.InlineKeyboardButton{
+	// 		{Text: h.translation.GetText(langCode, "feedback_button"), URL: config.FeedbackURL()},
+	// 	})
+	// }
 
-	if config.ChannelURL() != "" {
-		inlineKeyboard = append(inlineKeyboard, []models.InlineKeyboardButton{
-			{Text: h.translation.GetText(langCode, "channel_button"), URL: config.ChannelURL()},
-		})
-	}
+	// if config.ChannelURL() != "" {
+	// 	inlineKeyboard = append(inlineKeyboard, []models.InlineKeyboardButton{
+	// 		{Text: h.translation.GetText(langCode, "channel_button"), URL: config.ChannelURL()},
+	// 	})
+	// }
 
 	if config.TosURL() != "" {
 		inlineKeyboard = append(inlineKeyboard, []models.InlineKeyboardButton{
