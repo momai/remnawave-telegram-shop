@@ -63,6 +63,34 @@ type CheckoutResponse struct {
 	Data   CheckoutData `json:"data"`
 }
 
+type CheckoutStatusResponse struct {
+	Status Status            `json:"status"`
+	Data   CheckoutStatusData `json:"data"`
+}
+
+type CheckoutStatusData struct {
+	ID                string                 `json:"id"`
+	Status            string                 `json:"status"`
+	Amount            int                    `json:"amount"`
+	Currency          string                 `json:"currency"`
+	Country           string                 `json:"country"`
+	Description       string                 `json:"description"`
+	MerchantReferenceID string               `json:"merchant_reference_id"`
+	RedirectURL       string                 `json:"redirect_url"`
+	Payment           *PaymentDetails        `json:"payment,omitempty"`
+	Metadata          map[string]interface{} `json:"metadata"`
+	CreatedAt         int64                  `json:"created_at"`
+	UpdatedAt         int64                  `json:"updated_at"`
+}
+
+type PaymentDetails struct {
+	ID                string `json:"id"`
+	Status            string `json:"status"`
+	Amount            int    `json:"amount"`
+	Currency          string `json:"currency"`
+	PaymentMethodType string `json:"payment_method_type"`
+}
+
 type CheckoutData struct {
 	ID                string            `json:"id"`
 	Status            string            `json:"status"`

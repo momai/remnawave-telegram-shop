@@ -522,3 +522,66 @@ func (s PaymentService) CancelPayment(purchaseId int64) error {
 
 	return nil
 }
+
+// CheckRapydPaymentStatus проверяет статус Rapyd платежа и активирует подписку если оплачен
+func (s PaymentService) CheckRapydPaymentStatus(ctx context.Context, purchaseId int64) (bool, error) {
+	// Получаем информацию о покупке
+	purchase, err := s.purchaseRepository.FindById(ctx, purchaseId)
+	if err != nil {
+		return false, fmt.Errorf("failed to find purchase: %w", err)
+	}
+	if purchase == nil {
+		return false, fmt.Errorf("purchase %d not found", purchaseId)
+	}
+
+	// Проверяем что это Rapyd платеж
+	if purchase.InvoiceType != database.InvoiceTypeRapyd {
+		return false, fmt.Errorf("purchase %d is not a Rapyd payment", purchaseId)
+	}
+
+	// Проверяем что платеж еще не обработан
+	if purchase.Status == database.PurchaseStatusPaid {
+		return true, nil // Уже оплачен
+	}
+
+	// Проверяем что есть RapydCheckoutID
+	if purchase.RapydCheckoutID == nil || *purchase.RapydCheckoutID == "" {
+		return false, fmt.Errorf("purchase %d has no Rapyd checkout ID", purchaseId)
+	}
+
+	// Получаем статус checkout'а от Rapyd
+	checkoutStatus, err := s.rapydClient.GetCheckoutStatus(*purchase.RapydCheckoutID)
+	if err != nil {
+		return false, fmt.Errorf("failed to get checkout status: %w", err)
+	}
+
+	slog.Info("Rapyd checkout status check", 
+		"purchase_id", purchaseId,
+		"checkout_id", *purchase.RapydCheckoutID,
+		"status", checkoutStatus.Data.Status,
+		"payment_status", func() string {
+			if checkoutStatus.Data.Payment != nil {
+				return checkoutStatus.Data.Payment.Status
+			}
+			return "no_payment"
+		}())
+
+	// Проверяем статус платежа
+	isPaid := false
+	if checkoutStatus.Data.Status == "COMPLETED" || 
+	   (checkoutStatus.Data.Payment != nil && checkoutStatus.Data.Payment.Status == "CLO") {
+		isPaid = true
+	}
+
+	if isPaid {
+		// Активируем подписку
+		err = s.ProcessPurchaseById(ctx, purchaseId)
+		if err != nil {
+			return false, fmt.Errorf("failed to process purchase: %w", err)
+		}
+		slog.Info("Rapyd payment processed successfully", "purchase_id", purchaseId)
+		return true, nil
+	}
+
+	return false, nil // Еще не оплачен
+}

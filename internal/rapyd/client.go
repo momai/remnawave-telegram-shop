@@ -268,6 +268,39 @@ func (c *Client) CreateCheckout(amount int, currency, description, customerID, p
 	return &response, nil
 }
 
+// GetCheckoutStatus получает статус checkout'а
+func (c *Client) GetCheckoutStatus(checkoutID string) (*CheckoutStatusResponse, error) {
+	endpoint := fmt.Sprintf("/v1/checkout/%s", checkoutID)
+	
+	resp, err := c.makeRequestRaw("GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get checkout status: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[RAPYD] Error response: %s", string(body))
+		var errorResp ErrorResponse
+		if err := json.Unmarshal(body, &errorResp); err == nil {
+			return nil, fmt.Errorf("rapyd error: %s - %s", errorResp.Status.ErrorCode, errorResp.Status.Message)
+		}
+		return nil, fmt.Errorf("HTTP error: %d - %s", resp.StatusCode, string(body))
+	}
+
+	var response CheckoutStatusResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	log.Printf("[RAPYD] Checkout status: ID=%s, Status=%s", response.Data.ID, response.Data.Status)
+	return &response, nil
+}
+
 func (c *Client) GetPaymentMethodsByCountry(country, currency string) (*PaymentMethodsResponse, error) {
 	endpoint := fmt.Sprintf("/v1/payment_methods/countries/%s?currency=%s", country, currency)
 	

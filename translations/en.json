@@ -34,6 +34,10 @@
   "referral_bonus_granted": "You have received a referral bonus!",
   "stars_button": " ⭐Telegram Stars",
   "rapyd_button": "💳 Card/Bank",
+  "rapyd_check_button": "✅ I paid",
+  "rapyd_check_error": "❌ Payment verification error. Please try again later.",
+  "rapyd_check_success": "✅ Payment confirmed! Subscription activated.",
+  "rapyd_check_pending": "⏳ Payment not detected yet. Please try again in a few minutes.",
   "share_referral_button": "Share!",
   "web_app_button_text": "Connect"
 

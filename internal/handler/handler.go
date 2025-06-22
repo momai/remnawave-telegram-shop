@@ -544,16 +544,37 @@ func (h Handler) PaymentCallbackHandler(ctx context.Context, b *bot.Bot, update 
 
 	langCode := update.CallbackQuery.From.LanguageCode
 
+	// Создаем клавиатуру в зависимости от типа платежа
+	var keyboard [][]models.InlineKeyboardButton
+	
+	if invoiceType == database.InvoiceTypeRapyd {
+		// Для Rapyd показываем кнопку "Оплатить", "Я оплатил" и "Назад"
+		keyboard = [][]models.InlineKeyboardButton{
+			{
+				{Text: h.translation.GetText(langCode, "pay_button"), URL: paymentURL},
+			},
+			{
+				{Text: h.translation.GetText(langCode, "rapyd_check_button"), CallbackData: fmt.Sprintf("%s?purchaseId=%d", CallbackRapydCheck, purchaseId)},
+			},
+			{
+				{Text: h.translation.GetText(langCode, "back_button"), CallbackData: fmt.Sprintf("%s?month=%d&amount=%d", CallbackSell, month, price)},
+			},
+		}
+	} else {
+		// Для других типов платежей стандартная клавиатура
+		keyboard = [][]models.InlineKeyboardButton{
+			{
+				{Text: h.translation.GetText(langCode, "pay_button"), URL: paymentURL},
+				{Text: h.translation.GetText(langCode, "back_button"), CallbackData: fmt.Sprintf("%s?month=%d&amount=%d", CallbackSell, month, price)},
+			},
+		}
+	}
+
 	message, err := b.EditMessageReplyMarkup(ctx, &bot.EditMessageReplyMarkupParams{
 		ChatID:    callback.Chat.ID,
 		MessageID: callback.ID,
 		ReplyMarkup: models.InlineKeyboardMarkup{
-			InlineKeyboard: [][]models.InlineKeyboardButton{
-				{
-					{Text: h.translation.GetText(langCode, "pay_button"), URL: paymentURL},
-					{Text: h.translation.GetText(langCode, "back_button"), CallbackData: fmt.Sprintf("%s?month=%d&amount=%d", CallbackSell, month, price)},
-				},
-			},
+			InlineKeyboard: keyboard,
 		},
 	})
 	if err != nil {
@@ -657,6 +678,73 @@ func (h Handler) SuccessPaymentHandler(ctx context.Context, b *bot.Bot, update *
 		slog.Error("Error processing purchase", err)
 	}
 
+}
+
+func (h Handler) RapydCheckCallbackHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	callback := update.CallbackQuery.Message.Message
+	callbackQuery := parseCallbackData(update.CallbackQuery.Data)
+	
+	purchaseIdStr, exists := callbackQuery["purchaseId"]
+	if !exists {
+		slog.Error("No purchaseId in callback data")
+		return
+	}
+	
+	purchaseId, err := strconv.ParseInt(purchaseIdStr, 10, 64)
+	if err != nil {
+		slog.Error("Error parsing purchaseId", err)
+		return
+	}
+
+	langCode := update.CallbackQuery.From.LanguageCode
+
+	// Проверяем статус платежа
+	isPaid, err := h.paymentService.CheckRapydPaymentStatus(ctx, purchaseId)
+	if err != nil {
+		slog.Error("Error checking Rapyd payment status", err)
+		
+		// Показываем сообщение об ошибке
+		_, err = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+			Text:            h.translation.GetText(langCode, "rapyd_check_error"),
+			ShowAlert:       true,
+		})
+		if err != nil {
+			slog.Error("Error answering callback query", err)
+		}
+		return
+	}
+
+	if isPaid {
+		// Платеж найден и обработан
+		_, err = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+			Text:            h.translation.GetText(langCode, "rapyd_check_success"),
+			ShowAlert:       true,
+		})
+		if err != nil {
+			slog.Error("Error answering callback query", err)
+		}
+
+		// Удаляем сообщение с кнопками оплаты
+		_, err = b.DeleteMessage(ctx, &bot.DeleteMessageParams{
+			ChatID:    callback.Chat.ID,
+			MessageID: callback.ID,
+		})
+		if err != nil {
+			slog.Error("Error deleting message", err)
+		}
+	} else {
+		// Платеж еще не найден
+		_, err = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+			Text:            h.translation.GetText(langCode, "rapyd_check_pending"),
+			ShowAlert:       true,
+		})
+		if err != nil {
+			slog.Error("Error answering callback query", err)
+		}
+	}
 }
 
 func (h Handler) SyncUsersCommandHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
