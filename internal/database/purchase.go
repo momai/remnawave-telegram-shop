@@ -17,6 +17,7 @@ const (
 	InvoiceTypeCrypto   InvoiceType = "crypto"
 	InvoiceTypeYookasa  InvoiceType = "yookasa"
 	InvoiceTypeTelegram InvoiceType = "telegram"
+	InvoiceTypeRapyd    InvoiceType = "rapyd"
 )
 
 type PurchaseStatus string
@@ -43,6 +44,8 @@ type Purchase struct {
 	CryptoInvoiceLink *string        `db:"crypto_invoice_url"`
 	YookasaURL        *string        `db:"yookasa_url"`
 	YookasaID         *uuid.UUID     `db:"yookasa_id"`
+	RapydCheckoutID   *string        `db:"rapyd_checkout_id"`
+	RapydURL          *string        `db:"rapyd_url"`
 }
 
 type PurchaseRepository struct {
@@ -57,8 +60,8 @@ func NewPurchaseRepository(pool *pgxpool.Pool) *PurchaseRepository {
 
 func (cr *PurchaseRepository) Create(ctx context.Context, purchase *Purchase) (int64, error) {
 	buildInsert := sq.Insert("purchase").
-		Columns("amount", "customer_id", "month", "currency", "expire_at", "status", "invoice_type", "crypto_invoice_id", "crypto_invoice_url", "yookasa_url", "yookasa_id").
-		Values(purchase.Amount, purchase.CustomerID, purchase.Month, purchase.Currency, purchase.ExpireAt, purchase.Status, purchase.InvoiceType, purchase.CryptoInvoiceID, purchase.CryptoInvoiceLink, purchase.YookasaURL, purchase.YookasaID).
+		Columns("amount", "customer_id", "month", "currency", "expire_at", "status", "invoice_type", "crypto_invoice_id", "crypto_invoice_url", "yookasa_url", "yookasa_id", "rapyd_checkout_id", "rapyd_url").
+		Values(purchase.Amount, purchase.CustomerID, purchase.Month, purchase.Currency, purchase.ExpireAt, purchase.Status, purchase.InvoiceType, purchase.CryptoInvoiceID, purchase.CryptoInvoiceLink, purchase.YookasaURL, purchase.YookasaID, purchase.RapydCheckoutID, purchase.RapydURL).
 		Suffix("RETURNING id").
 		PlaceholderFormat(sq.Dollar)
 
@@ -114,6 +117,8 @@ func (cr *PurchaseRepository) FindByInvoiceTypeAndStatus(ctx context.Context, in
 			&purchase.CryptoInvoiceLink,
 			&purchase.YookasaURL,
 			&purchase.YookasaID,
+			&purchase.RapydCheckoutID,
+			&purchase.RapydURL,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan purchase: %w", err)
@@ -155,6 +160,8 @@ func (cr *PurchaseRepository) FindById(ctx context.Context, id int64) (*Purchase
 		&purchase.CryptoInvoiceLink,
 		&purchase.YookasaURL,
 		&purchase.YookasaID,
+		&purchase.RapydCheckoutID,
+		&purchase.RapydURL,
 	)
 
 	if err != nil {

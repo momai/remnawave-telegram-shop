@@ -26,6 +26,9 @@ type config struct {
 	yookasaShopId          string
 	yookasaSecretKey       string
 	yookasaEmail           string
+	rapydURL               string
+	rapydAccessKey         string
+	rapydSecretKey         string
 	trafficLimit           int
 	feedbackURL            string
 	channelURL             string
@@ -35,6 +38,7 @@ type config struct {
 	isYookasaEnabled       bool
 	isCryptoEnabled        bool
 	isTelegramStarsEnabled bool
+	isRapydEnabled         bool
 	adminTelegramId        int64
 	trialDays              int
 	trialTrafficLimit      int
@@ -149,6 +153,22 @@ func IsYookasaEnabled() bool {
 
 func IsTelegramStarsEnabled() bool {
 	return conf.isTelegramStarsEnabled
+}
+
+func IsRapydEnabled() bool {
+	return conf.isRapydEnabled
+}
+
+func RapydURL() string {
+	return conf.rapydURL
+}
+
+func RapydAccessKey() string {
+	return conf.rapydAccessKey
+}
+
+func RapydSecretKey() string {
+	return conf.rapydSecretKey
 }
 
 func GetAdminTelegramId() int64 {
@@ -274,6 +294,17 @@ func InitConfig() {
 		conf.yookasaEmail = os.Getenv("YOOKASA_EMAIL")
 		if conf.yookasaEmail == "" {
 			panic("YOOKASA_EMAIL .env variable not set")
+		}
+	}
+
+	conf.isRapydEnabled = os.Getenv("RAPYD_ENABLED") == "true"
+	if conf.isRapydEnabled {
+		conf.rapydURL = os.Getenv("RAPYD_URL")
+		conf.rapydAccessKey = os.Getenv("RAPYD_ACCESS_KEY")
+		conf.rapydSecretKey = os.Getenv("RAPYD_SECRET_KEY")
+
+		if conf.rapydURL == "" || conf.rapydAccessKey == "" || conf.rapydSecretKey == "" {
+			panic("RAPYD_URL, RAPYD_ACCESS_KEY, RAPYD_SECRET_KEY .env variables not set")
 		}
 	}
 

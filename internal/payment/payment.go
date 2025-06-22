@@ -10,10 +10,12 @@ import (
 	"remnawave-tg-shop-bot/internal/config"
 	"remnawave-tg-shop-bot/internal/cryptopay"
 	"remnawave-tg-shop-bot/internal/database"
+	"remnawave-tg-shop-bot/internal/rapyd"
 	"remnawave-tg-shop-bot/internal/remnawave"
 	"remnawave-tg-shop-bot/internal/translation"
 	"remnawave-tg-shop-bot/internal/yookasa"
 	"remnawave-tg-shop-bot/utils"
+	"strconv"
 	"time"
 )
 
@@ -25,6 +27,7 @@ type PaymentService struct {
 	translation        *translation.Manager
 	cryptoPayClient    *cryptopay.Client
 	yookasaClient      *yookasa.Client
+	rapydClient        *rapyd.Client
 	referralRepository *database.ReferralRepository
 	cache              *cache.Cache
 }
@@ -37,6 +40,7 @@ func NewPaymentService(
 	telegramBot *bot.Bot,
 	cryptoPayClient *cryptopay.Client,
 	yookasaClient *yookasa.Client,
+	rapydClient *rapyd.Client,
 	referralRepository *database.ReferralRepository,
 	cache *cache.Cache,
 ) *PaymentService {
@@ -48,6 +52,7 @@ func NewPaymentService(
 		translation:        translation,
 		cryptoPayClient:    cryptoPayClient,
 		yookasaClient:      yookasaClient,
+		rapydClient:        rapydClient,
 		referralRepository: referralRepository,
 		cache:              cache,
 	}
@@ -156,6 +161,49 @@ func (s PaymentService) ProcessPurchaseById(ctx context.Context, purchaseId int6
 	return nil
 }
 
+func (s PaymentService) createRapydInvoice(ctx context.Context, amount int, months int, customer *database.Customer) (url string, purchaseId int64, err error) {
+	purchaseId, err = s.purchaseRepository.Create(ctx, &database.Purchase{
+		InvoiceType:       database.InvoiceTypeRapyd,
+		Status:            database.PurchaseStatusNew,
+		Amount:            float64(amount),
+		Currency:          "USD",
+		CustomerID:        customer.ID,
+		Month:             months,
+		RapydCheckoutID:   nil,
+		RapydURL:          nil,
+	})
+	if err != nil {
+		slog.Error("Error creating purchase", err)
+		return "", 0, err
+	}
+
+	checkout, err := s.rapydClient.CreateCheckout(
+		amount,
+		"USD",
+		fmt.Sprintf("Subscription for %d month(s)", months),
+		strconv.FormatInt(customer.ID, 10),
+		strconv.FormatInt(purchaseId, 10),
+	)
+	if err != nil {
+		slog.Error("Error creating Rapyd checkout", err)
+		return "", 0, err
+	}
+
+	updates := map[string]interface{}{
+		"rapyd_checkout_id": checkout.Data.ID,
+		"rapyd_url":         checkout.Data.RedirectURL,
+		"status":            database.PurchaseStatusPending,
+	}
+
+	err = s.purchaseRepository.UpdateFields(ctx, purchaseId, updates)
+	if err != nil {
+		slog.Error("Error updating purchase", err)
+		return "", 0, err
+	}
+
+	return checkout.Data.RedirectURL, purchaseId, nil
+}
+
 func (s PaymentService) createConnectKeyboard(customer *database.Customer) [][]models.InlineKeyboardButton {
 	var inlineCustomerKeyboard [][]models.InlineKeyboardButton
 
@@ -185,6 +233,8 @@ func (s PaymentService) CreatePurchase(ctx context.Context, amount int, months i
 		return s.createYookasaInvoice(ctx, amount, months, customer)
 	case database.InvoiceTypeTelegram:
 		return s.createTelegramInvoice(ctx, amount, months, customer)
+	case database.InvoiceTypeRapyd:
+		return s.createRapydInvoice(ctx, amount, months, customer)
 	default:
 		return "", 0, fmt.Errorf("unknown invoice type: %s", invoiceType)
 	}
@@ -192,12 +242,14 @@ func (s PaymentService) CreatePurchase(ctx context.Context, amount int, months i
 
 func (s PaymentService) createCryptoInvoice(ctx context.Context, amount int, months int, customer *database.Customer) (url string, purchaseId int64, err error) {
 	purchaseId, err = s.purchaseRepository.Create(ctx, &database.Purchase{
-		InvoiceType: database.InvoiceTypeCrypto,
-		Status:      database.PurchaseStatusNew,
-		Amount:      float64(amount),
-		Currency:    "RUB",
-		CustomerID:  customer.ID,
-		Month:       months,
+		InvoiceType:       database.InvoiceTypeCrypto,
+		Status:            database.PurchaseStatusNew,
+		Amount:            float64(amount),
+		Currency:          "USD",
+		CustomerID:        customer.ID,
+		Month:             months,
+		RapydCheckoutID:   nil,
+		RapydURL:          nil,
 	})
 	if err != nil {
 		slog.Error("Error creating purchase", err)
@@ -206,11 +258,11 @@ func (s PaymentService) createCryptoInvoice(ctx context.Context, amount int, mon
 
 	invoice, err := s.cryptoPayClient.CreateInvoice(&cryptopay.InvoiceRequest{
 		CurrencyType:   "fiat",
-		Fiat:           "RUB",
+		Fiat:           "USD",
 		Amount:         fmt.Sprintf("%d", amount),
 		AcceptedAssets: "USDT",
 		Payload:        fmt.Sprintf("purchaseId=%d&username=%s", purchaseId, ctx.Value("username")),
-		Description:    fmt.Sprintf("Subscription on %d month", months),
+		Description:    fmt.Sprintf("Subscription for %d month", months),
 		PaidBtnName:    "callback",
 		PaidBtnUrl:     config.BotURL(),
 	})
@@ -236,12 +288,14 @@ func (s PaymentService) createCryptoInvoice(ctx context.Context, amount int, mon
 
 func (s PaymentService) createYookasaInvoice(ctx context.Context, amount int, months int, customer *database.Customer) (url string, purchaseId int64, err error) {
 	purchaseId, err = s.purchaseRepository.Create(ctx, &database.Purchase{
-		InvoiceType: database.InvoiceTypeYookasa,
-		Status:      database.PurchaseStatusNew,
-		Amount:      float64(amount),
-		Currency:    "RUB",
-		CustomerID:  customer.ID,
-		Month:       months,
+		InvoiceType:       database.InvoiceTypeYookasa,
+		Status:            database.PurchaseStatusNew,
+		Amount:            float64(amount),
+		Currency:          "RUB",
+		CustomerID:        customer.ID,
+		Month:             months,
+		RapydCheckoutID:   nil,
+		RapydURL:          nil,
 	})
 	if err != nil {
 		slog.Error("Error creating purchase", err)
@@ -271,12 +325,14 @@ func (s PaymentService) createYookasaInvoice(ctx context.Context, amount int, mo
 
 func (s PaymentService) createTelegramInvoice(ctx context.Context, amount int, months int, customer *database.Customer) (url string, purchaseId int64, err error) {
 	purchaseId, err = s.purchaseRepository.Create(ctx, &database.Purchase{
-		InvoiceType: database.InvoiceTypeTelegram,
-		Status:      database.PurchaseStatusNew,
-		Amount:      float64(amount),
-		Currency:    "STARS",
-		CustomerID:  customer.ID,
-		Month:       months,
+		InvoiceType:       database.InvoiceTypeTelegram,
+		Status:            database.PurchaseStatusNew,
+		Amount:            float64(amount),
+		Currency:          "STARS",
+		CustomerID:        customer.ID,
+		Month:             months,
+		RapydCheckoutID:   nil,
+		RapydURL:          nil,
 	})
 	if err != nil {
 		slog.Error("Error creating purchase", err)
