@@ -161,6 +161,42 @@ func (s PaymentService) ProcessPurchaseById(ctx context.Context, purchaseId int6
 	return nil
 }
 
+// getUserCountryFromIP определяет страну пользователя по IP (заглушка)
+// В реальном приложении здесь должен быть вызов к IP geolocation API
+func (s *PaymentService) getUserCountryFromIP(userIP string) string {
+	// TODO: Реализовать определение страны по IP
+	// Можно использовать:
+	// 1. MaxMind GeoIP2
+	// 2. IPinfo API
+	// 3. IP2Location API
+	// 4. Любой другой IP geolocation сервис
+	
+	// Пока возвращаем дефолтную страну
+	// В продакшене здесь должен быть реальный API вызов
+	return "US" // fallback
+}
+
+// getOptimalCurrencyForUser определяет оптимальную валюту для пользователя
+func (s *PaymentService) getOptimalCurrencyForUser(customer *database.Customer) string {
+	// 1. Сначала проверяем настройки пользователя (если есть)
+	// if customer.PreferredCurrency != "" {
+	//     return customer.PreferredCurrency
+	// }
+	
+	// 2. Определяем по стране пользователя
+	userCountry := s.getUserCountryFromIP("") // В реальности передавать IP
+	config := s.rapydClient.GetOptimalCurrencyConfig(userCountry)
+	
+	// 3. Логируем выбор валюты
+	slog.Info("Currency selection", 
+		"user_id", customer.ID,
+		"detected_country", userCountry, 
+		"selected_currency", config.Currency,
+		"settlement_currency", config.SettlementCurrency)
+	
+	return config.Currency
+}
+
 func (s PaymentService) createRapydInvoice(ctx context.Context, amount int, months int, customer *database.Customer) (url string, purchaseId int64, err error) {
 	purchaseId, err = s.purchaseRepository.Create(ctx, &database.Purchase{
 		InvoiceType:       database.InvoiceTypeRapyd,
@@ -177,9 +213,22 @@ func (s PaymentService) createRapydInvoice(ctx context.Context, amount int, mont
 		return "", 0, err
 	}
 
+	// Определяем оптимальную валюту для пользователя
+	currency := s.getOptimalCurrencyForUser(customer)
+	
+	// Пересчитываем сумму в зависимости от валюты
+	finalAmount := s.convertAmountToCurrency(amount, currency)
+	
+	slog.Info("Creating Rapyd invoice", 
+		"customer_id", customer.ID,
+		"original_amount_usd", amount,
+		"final_amount", finalAmount,
+		"currency", currency,
+		"months", months)
+
 	checkout, err := s.rapydClient.CreateCheckout(
-		amount,
-		"USD",
+		finalAmount,
+		currency,
 		fmt.Sprintf("Subscription for %d month(s)", months),
 		strconv.FormatInt(customer.ID, 10),
 		strconv.FormatInt(purchaseId, 10),
@@ -202,6 +251,60 @@ func (s PaymentService) createRapydInvoice(ctx context.Context, amount int, mont
 	}
 
 	return checkout.Data.RedirectURL, purchaseId, nil
+}
+
+// convertAmountToCurrency конвертирует сумму в указанную валюту
+func (s *PaymentService) convertAmountToCurrency(amountUSD int, currency string) int {
+	// Примерные курсы валют (в продакшене используй реальные курсы)
+	rates := map[string]float64{
+		"USD": 1.0,
+		"EUR": 0.85,    // 1 USD = 0.85 EUR
+		"GBP": 0.75,    // 1 USD = 0.75 GBP  
+		"ILS": 3.7,     // 1 USD = 3.7 ILS
+		"CAD": 1.35,    // 1 USD = 1.35 CAD
+		"AUD": 1.5,     // 1 USD = 1.5 AUD
+		"JPY": 150.0,   // 1 USD = 150 JPY
+		"SGD": 1.35,    // 1 USD = 1.35 SGD
+		"SEK": 10.5,    // 1 USD = 10.5 SEK
+		"NOK": 10.8,    // 1 USD = 10.8 NOK
+		"DKK": 6.8,     // 1 USD = 6.8 DKK
+		"CHF": 0.9,     // 1 USD = 0.9 CHF
+		"PLN": 4.0,     // 1 USD = 4.0 PLN
+		"CZK": 23.0,    // 1 USD = 23.0 CZK
+		"HUF": 360.0,   // 1 USD = 360 HUF
+		"RON": 4.6,     // 1 USD = 4.6 RON
+		"BGN": 1.8,     // 1 USD = 1.8 BGN
+		"HRK": 6.8,     // 1 USD = 6.8 HRK
+		"MXN": 17.0,    // 1 USD = 17.0 MXN
+		"BRL": 5.0,     // 1 USD = 5.0 BRL
+		"ZAR": 18.0,    // 1 USD = 18.0 ZAR
+		"RUB": 75.0,    // 1 USD = 75.0 RUB (может быть неактуально)
+		"UAH": 36.0,    // 1 USD = 36.0 UAH
+		"INR": 83.0,    // 1 USD = 83.0 INR
+		"KRW": 1300.0,  // 1 USD = 1300 KRW
+		"TWD": 31.0,    // 1 USD = 31.0 TWD
+		"THB": 35.0,    // 1 USD = 35.0 THB
+		"MYR": 4.6,     // 1 USD = 4.6 MYR
+		"IDR": 15000.0, // 1 USD = 15000 IDR
+		"PHP": 55.0,    // 1 USD = 55.0 PHP
+	}
+	
+	rate, exists := rates[currency]
+	if !exists {
+		slog.Warn("Unknown currency, using USD", "currency", currency)
+		return amountUSD
+	}
+	
+	// Конвертируем и округляем
+	convertedAmount := float64(amountUSD) * rate
+	
+	// Для некоторых валют используем разные правила округления
+	switch currency {
+	case "JPY", "KRW", "IDR": // Валюты без копеек
+		return int(convertedAmount)
+	default: // Валюты с копейками - округляем до целых
+		return int(convertedAmount + 0.5)
+	}
 }
 
 func (s PaymentService) createConnectKeyboard(customer *database.Customer) [][]models.InlineKeyboardButton {

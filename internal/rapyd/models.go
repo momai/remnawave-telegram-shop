@@ -2,6 +2,20 @@ package rapyd
 
 import "time"
 
+// Общие структуры для статусов и ошибок
+type Status struct {
+	ErrorCode     string `json:"error_code"`
+	Status        string `json:"status"`
+	Message       string `json:"message"`
+	ResponseCode  string `json:"response_code"`
+	OperationID   string `json:"operation_id"`
+}
+
+type ErrorResponse struct {
+	Status Status `json:"status"`
+}
+
+// Структуры для создания checkout
 type CreateCheckoutRequest struct {
 	Amount int `json:"amount"`
 	Currency               string            `json:"currency"`
@@ -20,9 +34,10 @@ type PaymentMethod struct {
 	Type string `json:"type"`
 }
 
+// Устаревшая структура - оставляем для совместимости
 type CreateCheckoutResponse struct {
 	Status CheckoutStatus `json:"status"`
-	Data   CheckoutData   `json:"data"`
+	Data   OldCheckoutData   `json:"data"`
 }
 
 type CheckoutStatus struct {
@@ -32,7 +47,7 @@ type CheckoutStatus struct {
 	ResponseCode string `json:"response_code"`
 }
 
-type CheckoutData struct {
+type OldCheckoutData struct {
 	ID                 string    `json:"id"`
 	Amount             float64   `json:"amount"`
 	Currency           string    `json:"currency"`
@@ -42,6 +57,25 @@ type CheckoutData struct {
 	MerchantReferenceID string   `json:"merchant_reference_id"`
 }
 
+// Новые правильные структуры
+type CheckoutResponse struct {
+	Status Status       `json:"status"`
+	Data   CheckoutData `json:"data"`
+}
+
+type CheckoutData struct {
+	ID                string            `json:"id"`
+	Status            string            `json:"status"`
+	RedirectURL       string            `json:"redirect_url"`
+	Country           string            `json:"country"`
+	Currency          string            `json:"currency"`
+	Amount            int               `json:"amount"`
+	Description       string            `json:"description"`
+	MerchantReference string            `json:"merchant_reference_id"`
+	Metadata          map[string]string `json:"metadata"`
+}
+
+// Webhook структуры
 type WebhookRequest struct {
 	ID        string                 `json:"id"`
 	Type      string                 `json:"type"`
@@ -99,23 +133,4 @@ type AmountRangePerCurrency struct {
 	Currency      string  `json:"currency"`
 	MaximumAmount *int    `json:"maximum_amount"`
 	MinimumAmount *int    `json:"minimum_amount"`
-}
-
-// CheckoutResponse ответ от создания checkout
-type CheckoutResponse struct {
-	Status Status       `json:"status"`
-	Data   CheckoutData `json:"data"`
-}
-
-// CheckoutData данные checkout
-type CheckoutData struct {
-	ID                string            `json:"id"`
-	Status            string            `json:"status"`
-	RedirectURL       string            `json:"redirect_url"`
-	Country           string            `json:"country"`
-	Currency          string            `json:"currency"`
-	Amount            int               `json:"amount"`
-	Description       string            `json:"description"`
-	MerchantReference string            `json:"merchant_reference_id"`
-	Metadata          map[string]string `json:"metadata"`
 } 
