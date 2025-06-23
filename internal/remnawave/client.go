@@ -183,5 +183,9 @@ func getNewExpire(daysToAdd int, currentExpire time.Time) time.Time {
 		return time.Now().UTC().AddDate(0, 0, daysToAdd)
 	}
 
+	if currentExpire.Before(time.Now().UTC()) {
+		return time.Now().UTC().AddDate(0, 0, daysToAdd)
+	}
+
 	return currentExpire.AddDate(0, 0, daysToAdd)
 }

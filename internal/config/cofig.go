@@ -15,6 +15,10 @@ type config struct {
 	price3                 int
 	price6                 int
 	price12                int
+	starsPrice1            int
+	starsPrice3            int
+	starsPrice6            int
+	starsPrice12           int
 	remnawaveUrl           string
 	remnawaveToken         string
 	remnawaveMode          string
@@ -102,6 +106,52 @@ func Price6() int {
 }
 func Price12() int {
 	return conf.price12
+}
+
+func Price(month int) int {
+	switch month {
+	case 1:
+		return conf.price1
+	case 3:
+		return conf.price3
+	case 6:
+		return conf.price6
+	case 12:
+		return conf.price12
+	default:
+		return conf.price1
+	}
+}
+
+func StarsPrice1() int {
+	return conf.starsPrice1
+}
+
+func StarsPrice3() int {
+	return conf.starsPrice3
+}
+
+func StarsPrice6() int {
+	return conf.starsPrice6
+}
+
+func StarsPrice12() int {
+	return conf.starsPrice12
+}
+
+func StarsPrice(month int) int {
+	switch month {
+	case 1:
+		return conf.starsPrice1
+	case 3:
+		return conf.starsPrice3
+	case 6:
+		return conf.starsPrice6
+	case 12:
+		return conf.starsPrice12
+	default:
+		return conf.starsPrice1
+	}
 }
 func TelegramToken() string {
 	return conf.telegramToken
@@ -215,6 +265,17 @@ func InitConfig() {
 	}
 	conf.price1 = price
 
+	starsPrice1Str := os.Getenv("STARS_PRICE_1")
+	if starsPrice1Str != "" {
+		priceStar1, err := strconv.Atoi(starsPrice1Str)
+		if err != nil {
+			panic(err)
+		}
+		conf.starsPrice1 = priceStar1
+	} else {
+		conf.starsPrice1 = conf.price1
+	}
+
 	strPrice3 := os.Getenv("PRICE_3")
 	if strPrice3 == "" {
 		panic("PRICE_3 .env variable not set")
@@ -224,6 +285,17 @@ func InitConfig() {
 		panic(err)
 	}
 	conf.price3 = price3
+
+	starsPrice3Str := os.Getenv("STARS_PRICE_3")
+	if starsPrice3Str != "" {
+		priceStar3, err := strconv.Atoi(starsPrice3Str)
+		if err != nil {
+			panic(err)
+		}
+		conf.starsPrice3 = priceStar3
+	} else {
+		conf.starsPrice3 = conf.price3
+	}
 
 	strPrice6 := os.Getenv("PRICE_6")
 	if strPrice6 == "" {
@@ -235,6 +307,17 @@ func InitConfig() {
 	}
 	conf.price6 = price6
 
+	starsPrice6Str := os.Getenv("STARS_PRICE_6")
+	if starsPrice6Str != "" {
+		priceStar6, err := strconv.Atoi(starsPrice6Str)
+		if err != nil {
+			panic(err)
+		}
+		conf.starsPrice6 = priceStar6
+	} else {
+		conf.starsPrice6 = conf.price6
+	}
+
 	strPrice12 := os.Getenv("PRICE_12")
 	if strPrice12 == "" {
 		panic("PRICE_12 .env variable not set")
@@ -244,6 +327,17 @@ func InitConfig() {
 		panic(err)
 	}
 	conf.price12 = price12
+
+	starsPrice12Str := os.Getenv("STARS_PRICE_12")
+	if starsPrice12Str != "" {
+		priceStar12, err := strconv.Atoi(starsPrice12Str)
+		if err != nil {
+			panic(err)
+		}
+		conf.starsPrice12 = priceStar12
+	} else {
+		conf.starsPrice12 = conf.price12
+	}
 
 	conf.remnawaveUrl = os.Getenv("REMNAWAVE_URL")
 	if conf.remnawaveUrl == "" {
