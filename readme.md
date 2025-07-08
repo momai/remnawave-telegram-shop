@@ -23,6 +23,82 @@ purchase and manage subscriptions through Telegram with multiple payment system 
 - Telegram Stars
 - Tribute
 
+## Tribute Integration (Subscription via Tribute)
+
+---
+**Attention!**  
+To integrate with Tribute, you must have a public domain (e.g., `bot.example.com`) that points to your bot server.  
+Webhook and subscription setup will not work on a local address or IP — only via a domain with a valid SSL certificate.
+---
+
+### How the integration works
+
+The bot supports subscription management via the Tribute service. When a user clicks the payment button, they are redirected to the Tribute bot or payment page to complete the subscription. After successful payment, Tribute sends a webhook to your server, and the bot activates the subscription for the user.
+
+### Step-by-step setup guide
+
+1. **Create a channel in Tribute**
+   - In the Tribute service, create a new product of type "Channel Subscription".
+   - Obtain the subscription link (this is a special payment page link).
+
+2. **Configure environment variables in .env**
+   - Set the webhook path (e.g., `/tribute/webhook`):
+     ```
+     TRIBUTE_WEBHOOK_URL=/tribute/webhook
+     ```
+   - Set the API key from your Tribute settings:
+     ```
+     TRIBUTE_API_KEY=your_tribute_api_key
+     ```
+   - Paste the subscription link you got from Tribute:
+     ```
+     TRIBUTE_PAYMENT_URL=https://t.me/tribute/app?startapp=...
+     ```
+   - Specify the port the app will use:
+     ```
+     HEALTH_CHECK_PORT=82251
+     ```
+
+3. **Configure proxying (if using Traefik or another reverse proxy)**
+   - Example Traefik config:
+     ```yaml
+     http:
+       routers:
+         remnawave-telegram-shop:
+           rule: "Host(`bot.example.com`)"
+           entrypoints:
+             - http
+           middlewares:
+             - redirect-to-https
+           service: remnawave-telegram-shop
+
+         remnawave-telegram-shop-secure:
+           rule: "Host(`bot.example.com`)"
+           entrypoints:
+             - https
+           tls:
+             certResolver: letsencrypt
+           service: remnawave-telegram-shop
+
+       middlewares:
+         redirect-to-https:
+           redirectScheme:
+             scheme: https
+
+       services:
+         remnawave-telegram-shop:
+           loadBalancer:
+             servers:
+               - url: "http://bot:82251"
+     ```
+
+4. **Restart the services**
+   ```bash
+   docker compose down && docker compose up -d
+   ```
+
+
+---
 ## Features
 
 - Purchase VPN subscriptions with different payment methods (bank cards, cryptocurrency)

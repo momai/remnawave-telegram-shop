@@ -35,5 +35,8 @@
   "stars_button": " ⭐Telegram Stars",
   "share_referral_button": "Share!",
   "web_app_button_text": "Connect",
-  "tribute_button": "Tribute"
+  "tribute_button": "Tribute",
+  "choose_payment_method": "Choose payment method:",
+  "tribute_subscribe_button": "📱 Subscribe via Tribute",
+  "tribute_subscription_info": "🔄 <b>Subscription via Tribute</b>\n\nYou will be redirected to Tribute to set up a subscription with automatic renewal.\n\nThe amount will be charged monthly until you cancel the subscription in Tribute settings."
 }

@@ -16,6 +16,10 @@ import (
 )
 
 func (h Handler) BuyCallbackHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	// Use new payment flow: first select payment method, then period
+	h.PaymentMethodHandler(ctx, b, update)
+	
+	/* OLD LOGIC - KEPT FOR REFERENCE:
 	callback := update.CallbackQuery.Message.Message
 	langCode := update.CallbackQuery.From.LanguageCode
 
@@ -75,6 +79,7 @@ func (h Handler) BuyCallbackHandler(ctx context.Context, b *bot.Bot, update *mod
 	if err != nil {
 		slog.Error("Error sending buy message", err)
 	}
+	*/
 }
 
 func (h Handler) SellCallbackHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -130,7 +135,15 @@ func (h Handler) SellCallbackHandler(ctx context.Context, b *bot.Bot, update *mo
 func (h Handler) PaymentCallbackHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	callback := update.CallbackQuery.Message.Message
 	callbackQuery := parseCallbackData(update.CallbackQuery.Data)
-	month, err := strconv.Atoi(callbackQuery["month"])
+	
+	// Check if month parameter exists (to avoid errors from new payment flow)
+	monthStr, exists := callbackQuery["month"]
+	if !exists || monthStr == "" {
+		slog.Error("Month parameter missing in payment callback")
+		return
+	}
+	
+	month, err := strconv.Atoi(monthStr)
 	if err != nil {
 		slog.Error("Error getting month from query", err)
 		return
@@ -228,4 +241,157 @@ func parseCallbackData(data string) map[string]string {
 	}
 
 	return result
+}
+
+// New payment flow handlers
+
+// PaymentMethodHandler - shows payment method selection (first step)
+func (h Handler) PaymentMethodHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	callback := update.CallbackQuery.Message.Message
+	langCode := update.CallbackQuery.From.LanguageCode
+
+	var keyboard [][]models.InlineKeyboardButton
+
+	// Tribute goes first (no period selection)
+	if config.GetTributeWebHookUrl() != "" {
+		keyboard = append(keyboard, []models.InlineKeyboardButton{
+			{Text: h.translation.GetText(langCode, "tribute_button"), CallbackData: CallbackTributePayment},
+		})
+	}
+
+	// Add other payment methods
+	if config.IsCryptoPayEnabled() {
+		keyboard = append(keyboard, []models.InlineKeyboardButton{
+			{Text: h.translation.GetText(langCode, "crypto_button"), CallbackData: fmt.Sprintf("%s?method=%s", CallbackPeriodSelect, database.InvoiceTypeCrypto)},
+		})
+	}
+
+	if config.IsYookasaEnabled() {
+		keyboard = append(keyboard, []models.InlineKeyboardButton{
+			{Text: h.translation.GetText(langCode, "card_button"), CallbackData: fmt.Sprintf("%s?method=%s", CallbackPeriodSelect, database.InvoiceTypeYookasa)},
+		})
+	}
+
+	if config.IsTelegramStarsEnabled() {
+		keyboard = append(keyboard, []models.InlineKeyboardButton{
+			{Text: h.translation.GetText(langCode, "stars_button"), CallbackData: fmt.Sprintf("%s?method=%s", CallbackPeriodSelect, database.InvoiceTypeTelegram)},
+		})
+	}
+
+	keyboard = append(keyboard, []models.InlineKeyboardButton{
+		{Text: h.translation.GetText(langCode, "back_button"), CallbackData: CallbackStart},
+	})
+
+	_, err := b.EditMessageText(ctx, &bot.EditMessageTextParams{
+		ChatID:    callback.Chat.ID,
+		MessageID: callback.ID,
+		ParseMode: models.ParseModeHTML,
+		ReplyMarkup: models.InlineKeyboardMarkup{
+			InlineKeyboard: keyboard,
+		},
+		Text: h.translation.GetText(langCode, "choose_payment_method"),
+	})
+
+	if err != nil {
+		slog.Error("Error sending payment method selection", err)
+	}
+}
+
+// PeriodSelectHandler - shows period selection for non-Tribute methods
+func (h Handler) PeriodSelectHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	callback := update.CallbackQuery.Message.Message
+	callbackQuery := parseCallbackData(update.CallbackQuery.Data)
+	langCode := update.CallbackQuery.From.LanguageCode
+	method := callbackQuery["method"]
+
+	var priceButtons []models.InlineKeyboardButton
+
+	var getPrice func(int) int
+	if database.InvoiceType(method) == database.InvoiceTypeTelegram {
+		getPrice = config.StarsPrice
+	} else {
+		getPrice = config.Price
+	}
+
+	if config.Price1() > 0 {
+		priceButtons = append(priceButtons, models.InlineKeyboardButton{
+			Text:         h.translation.GetText(langCode, "month_1"),
+			CallbackData: fmt.Sprintf("%s?month=%d&amount=%d&invoiceType=%s", CallbackPayment, 1, getPrice(1), method),
+		})
+	}
+
+	if config.Price3() > 0 {
+		priceButtons = append(priceButtons, models.InlineKeyboardButton{
+			Text:         h.translation.GetText(langCode, "month_3"),
+			CallbackData: fmt.Sprintf("%s?month=%d&amount=%d&invoiceType=%s", CallbackPayment, 3, getPrice(3), method),
+		})
+	}
+
+	if config.Price6() > 0 {
+		priceButtons = append(priceButtons, models.InlineKeyboardButton{
+			Text:         h.translation.GetText(langCode, "month_6"),
+			CallbackData: fmt.Sprintf("%s?month=%d&amount=%d&invoiceType=%s", CallbackPayment, 6, getPrice(6), method),
+		})
+	}
+
+	if config.Price12() > 0 {
+		priceButtons = append(priceButtons, models.InlineKeyboardButton{
+			Text:         h.translation.GetText(langCode, "month_12"),
+			CallbackData: fmt.Sprintf("%s?month=%d&amount=%d&invoiceType=%s", CallbackPayment, 12, getPrice(12), method),
+		})
+	}
+
+	keyboard := [][]models.InlineKeyboardButton{}
+
+	if len(priceButtons) == 4 {
+		keyboard = append(keyboard, priceButtons[:2])
+		keyboard = append(keyboard, priceButtons[2:])
+	} else if len(priceButtons) > 0 {
+		keyboard = append(keyboard, priceButtons)
+	}
+
+	keyboard = append(keyboard, []models.InlineKeyboardButton{
+		{Text: h.translation.GetText(langCode, "back_button"), CallbackData: CallbackPaymentMethod},
+	})
+
+	_, err := b.EditMessageText(ctx, &bot.EditMessageTextParams{
+		ChatID:    callback.Chat.ID,
+		MessageID: callback.ID,
+		ParseMode: models.ParseModeHTML,
+		ReplyMarkup: models.InlineKeyboardMarkup{
+			InlineKeyboard: keyboard,
+		},
+		Text: h.translation.GetText(langCode, "pricing_info"),
+	})
+
+	if err != nil {
+		slog.Error("Error sending period selection", err)
+	}
+}
+
+// TributePaymentHandler - directly redirects to Tribute payment
+func (h Handler) TributePaymentHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	callback := update.CallbackQuery.Message.Message
+	langCode := update.CallbackQuery.From.LanguageCode
+
+	_, err := b.EditMessageText(ctx, &bot.EditMessageTextParams{
+		ChatID:    callback.Chat.ID,
+		MessageID: callback.ID,
+		ParseMode: models.ParseModeHTML,
+		ReplyMarkup: models.InlineKeyboardMarkup{
+			InlineKeyboard: [][]models.InlineKeyboardButton{
+				{
+					{Text: h.translation.GetText(langCode, "tribute_subscribe_button"), URL: config.GetTributePaymentUrl()},
+				},
+				{
+					{Text: h.translation.GetText(langCode, "back_button"), CallbackData: CallbackPaymentMethod},
+				},
+			},
+		},
+		Text: h.translation.GetText(langCode, "tribute_subscription_info"),
+	})
+
+	if err != nil {
+		slog.Error("Error showing Tribute payment", err)
+	}
 }
