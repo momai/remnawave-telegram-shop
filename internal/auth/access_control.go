@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	ACTIVATION_CODE = "00196400"
 	ACCESS_FILE     = "./data/approved_users.json"
 )
 

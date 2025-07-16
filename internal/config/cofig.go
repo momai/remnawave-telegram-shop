@@ -29,6 +29,7 @@ type config struct {
 	isCryptoEnabled                                           bool
 	isTelegramStarsEnabled                                    bool
 	adminTelegramId                                           int64
+	activationCode                                            string
 	trialDays                                                 int
 	inboundUUIDs                                              map[uuid.UUID]uuid.UUID
 	referralDays                                              int
@@ -195,6 +196,10 @@ func GetAdminTelegramId() int64 {
 	return conf.adminTelegramId
 }
 
+func GetActivationCode() string {
+	return conf.activationCode
+}
+
 func GetHealthCheckPort() int {
 	return conf.healthCheckPort
 }
@@ -244,6 +249,11 @@ func InitConfig() {
 	conf.adminTelegramId, err = strconv.ParseInt(os.Getenv("ADMIN_TELEGRAM_ID"), 10, 64)
 	if err != nil {
 		panic("ADMIN_TELEGRAM_ID .env variable not set")
+	}
+
+	conf.activationCode = os.Getenv("ACTIVATION_CODE")
+	if conf.activationCode == "" {
+		conf.activationCode = "00196400" // значение по умолчанию
 	}
 
 	conf.telegramToken = mustEnv("TELEGRAM_TOKEN")

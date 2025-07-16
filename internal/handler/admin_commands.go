@@ -10,7 +10,7 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"log/slog"
-	"remnawave-tg-shop-bot/internal/auth"
+	"remnawave-tg-shop-bot/internal/config"
 )
 
 // ApproveUserCommandHandler обрабатывает команду /approve для добавления пользователя в список одобренных
@@ -112,7 +112,7 @@ func (h Handler) ActivationCodeHandler(ctx context.Context, b *bot.Bot, update *
 	userID := update.Message.From.ID
 
 	// Проверяем, является ли сообщение кодом активации
-	if messageText == auth.ACTIVATION_CODE {
+	if messageText == config.GetActivationCode() {
 		err := h.accessControl.ApproveUser(userID)
 		if err != nil {
 			slog.Error("Error approving user via activation code", "userId", userID, "error", err)
