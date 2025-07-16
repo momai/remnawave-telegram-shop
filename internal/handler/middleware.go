@@ -7,6 +7,7 @@ import (
 	"github.com/go-telegram/bot/models"
 	"log/slog"
 
+	"remnawave-tg-shop-bot/internal/config"
 	"remnawave-tg-shop-bot/internal/database"
 )
 
@@ -48,6 +49,36 @@ func (h Handler) CreateCustomerIfNotExistMiddleware(next bot.HandlerFunc) bot.Ha
 			}
 		}
 
+		next(ctx, b, update)
+	}
+}
+
+// AccessControlMiddleware проверяет, одобрен ли пользователь для использования бота
+func (h Handler) AccessControlMiddleware(next bot.HandlerFunc) bot.HandlerFunc {
+	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
+		var telegramId int64
+		
+		if update.Message != nil {
+			telegramId = update.Message.From.ID
+		} else if update.CallbackQuery != nil {
+			telegramId = update.CallbackQuery.From.ID
+		} else {
+			return
+		}
+
+		// Админ всегда имеет доступ
+		if telegramId == config.GetAdminTelegramId() {
+			next(ctx, b, update)
+			return
+		}
+
+		// Проверяем, одобрен ли пользователь
+		if !h.accessControl.IsUserApproved(telegramId) {
+			// Пользователь не одобрен - ничего не отвечаем
+			return
+		}
+
+		// Пользователь одобрен - продолжаем обработку
 		next(ctx, b, update)
 	}
 }
